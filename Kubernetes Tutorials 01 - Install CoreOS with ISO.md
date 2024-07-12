@@ -146,41 +146,93 @@ vi /root/CoreOS/cloud-config.yaml
 
 Replace the variables with your own environment values.
 
-    {CoreOS-Hostname}:      Server Hostname. e.g., coreos1
-    {Public-Key-Content}:   The content of your public key which was generated in previous step.
-    {NIC-Name}:             Network Card Name. e.g., ens160
-    {DNS}:                  DNS IP ADDRESS. e.g, 10.10.116.202
-    {IPADDR}:               IP ADDRESS. e.g., 10.1.51.12/25
-    {TimeZone}:             TimeZone, using "timedatectl list-timezones" on CentOS 7 to list and find your own timezone value. e.g., America/Los_Angeles
-    {NTP}:                  NTP Server Addresses, separate with space. e.g., 10.1.37.52
+    {CoreOS-Hostname}:        Server Hostname. e.g., coreos1
+    {Public-Key-Content}:     The content of your public key which was generated in previous step.
+    {Password-Hash-Content}:  Hash for pass for core user, command line "mkpasswd --method=yescrypt"
+    {NIC-Name}:               Network Card Name. e.g., ens160
+    {DNS}:                    DNS IP ADDRESS. e.g, 10.10.116.202
+    {IPADDR}:                 IP ADDRESS. e.g., 10.1.51.12/25
+    {TimeZone}:               TimeZone, using "timedatectl list-timezones" on CentOS 7 to list and find your own timezone value. e.g., America/Los_Angeles
+    {NTP}:                    NTP Server Addresses, separate with space. e.g., 10.1.37.52
 
 
 ```yaml
-#cloud-config
-#
-##hostname
-hostname: "{CoreOS-Hostname}"
+variant: fcos
+version: 1.1.0
+passwd:
+  users:
+    - name: core
+      groups:
+        - docker
+        - wheel
+        - sudo
+      password_hash: {Password-Hash-Content}
+      ssh_authorized_keys:
+        - {Public-Key-Content}
+storage:
+  files:
+    - path: /etc/hostname
+      mode: 420
+      contents:
+        inline: {CoreOS-Hostname}
 
-# include one or more SSH public keys
-ssh_authorized_keys:
-  - {Public-Key-Content}
-# Network
-coreos:
+    - path: /etc/NetworkManager/system-connections/{NIC-Name1}.nmconnection
+      mode: 0600
+      overwrite: true
+      contents:
+        inline: |
+          [connection]
+          type=ethernet
+          id="Wired connection 1"
+          interface-name={NIC-Name1}
+
+          [ipv4]
+          method=auto
+
+    - path: /etc/NetworkManager/system-connections/{NIC-Name2}.nmconnection
+      mode: 0600
+      overwrite: true
+      contents:
+        inline: |
+          [connection]
+          type=ethernet
+          id="Wired connection 2"
+          interface-name={NIC-Name2}
+
+          [ipv4]
+          method=manual
+          addresses={IPADDR1}
+          gateway={GATEWAY}
+          dns={DNS}
+
+    - path: /etc/NetworkManager/system-connections/{NIC-Name3}.nmconnection
+      mode: 0600
+      overwrite: true
+      contents:
+        inline: |
+          [connection]
+          type=ethernet
+          id="Wired connection 3"
+          interface-name={NIC-Name3}
+
+          [ipv4]
+          method=manual
+          addresses={IPADDR2}
+          gateway={GATEWAY}
+          dns={DNS}
+
+    - path: /etc/systemd/timesyncd.conf
+      mode: 0644
+      contents:
+        inline: |
+          [Time]
+          NTP={NTP}
+
+systemd:
   units:
-    - name: 00-internal.network
-      runtime: true
-      content: |
-        [Match]
-        Name={NIC-Name}
-
-        [Network]
-        DNS={DNS}
-        Address={IPADDR}
-        Gateway={GATEWAY}
-
     - name: settimezone.service
-      command: start
-      content: |
+      enabled: true
+      contents: |
         [Unit]
         Description=Set the time zone
 
@@ -188,45 +240,62 @@ coreos:
         ExecStart=/usr/bin/timedatectl set-timezone {TimeZone}
         RemainAfterExit=yes
         Type=oneshot
-    - name: update-engine.service
-      mask: true
-    - name: locksmithd.service
-      mask: true
-write_files:
-  - path: /etc/systemd/timesyncd.conf
-    content: |
-      [Time]
-      NTP={NTP}
+        
+        [Install]
+        WantedBy=multi-user.target
 ```
 ___
 Here is an example with values;
 
 ```yaml
-#cloud-config
-#
-##hostname
-hostname: "coreos1"
+variant: fcos
+version: 1.1.0
+passwd:
+  users:
+    - name: core
+      groups:
+        - docker
+        - wheel
+        - sudo
+      password_hash: $y$j9T$a3IxPYePzKUcyCFhMxE4e.$M8VsSea2BEsP3lsQyWHG4A4A5OiMeIMmCjhOr4H9Mo6
+      ssh_authorized_keys:
+        - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDV/DpQ8veDFrOBCZcCzVnOJhLunhOTlYctErXZ0kXXGK42D6TOD26plQK8UTwEko/Az89KhUZEHKImJmiSfmuPbUr0LlIwL7c0z0mHmXxZXUNBz4oDraz5YplXG27YJhNgqomL1l8vFcp4KZRnnHCd47K7s3ISAnRvlKD59nEB3iLFN25iLgqE015RkzVoOOcQn+dxf535jpsWqSNj4IzLQTQP0+RAa91f25cAef3nP9nV8BQFeQsrNhVWeLqcxsugsrBdqnd4MpPooHKJ7FmA4uqn/AHXZLeRK6l+CdLXlaCeOnVYWrzRkPbW+MnpsOBQSdM7djdwpWp9cJeVAvTL jude.x.zhu@newegg.com
+storage:
+  files:
+    - path: /etc/hostname
+      mode: 420
+      contents:
+        inline: coreos1
 
-# include one or more SSH public keys
-ssh_authorized_keys:
-  - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDV/DpQ8veDFrOBCZcCzVnOJhLunhOTlYctErXZ0kXXGK42D6TOD26plQK8UTwEko/Az89KhUZEHKImJmiSfmuPbUr0LlIwL7c0z0mHmXxZXUNBz4oDraz5YplXG27YJhNgqomL1l8vFcp4KZRnnHCd47K7s3ISAnRvlKD59nEB3iLFN25iLgqE015RkzVoOOcQn+dxf535jpsWqSNj4IzLQTQP0+RAa91f25cAef3nP9nV8BQFeQsrNhVWeLqcxsugsrBdqnd4MpPooHKJ7FmA4uqn/AHXZLeRK6l+CdLXlaCeOnVYWrzRkPbW+MnpsOBQSdM7djdwpWp9cJeVAvTL jude.x.zhu@newegg.com
-# Network
-coreos:
+    - path: /etc/NetworkManager/system-connections/ens160.nmconnection
+      mode: 0600
+      overwrite: true
+      contents:
+        inline: |
+          [connection]
+          type=ethernet
+          id="Wired connection 1"
+          interface-name=ens160
+
+          [ipv4]
+          method=manual
+          addresses=10.1.51.12/25
+          gateway=10.1.51.1
+          dns=10.10.116.202
+
+
+    - path: /etc/systemd/timesyncd.conf
+      mode: 0644
+      contents:
+        inline: |
+          [Time]
+          NTP=10.1.37.52
+
+systemd:
   units:
-    - name: 00-internal.network
-      runtime: true
-      content: |
-        [Match]
-        Name=ens160
-
-        [Network]
-        DNS=10.10.116.202
-        Address=10.1.51.12/25
-        Gateway=10.1.51.1
-
     - name: settimezone.service
-      command: start
-      content: |
+      enabled: true
+      contents: |
         [Unit]
         Description=Set the time zone
 
@@ -234,19 +303,19 @@ coreos:
         ExecStart=/usr/bin/timedatectl set-timezone America/Los_Angeles
         RemainAfterExit=yes
         Type=oneshot
-    - name: update-engine.service
-      mask: true
-    - name: locksmithd.service
-      mask: true
-write_files:
-  - path: /etc/systemd/timesyncd.conf
-    content: |
-      [Time]
-      NTP=10.1.37.52
+        
+        [Install]
+        WantedBy=multi-user.target
+```
+## 6: Make ignition file  
+
+Check yaml config and make ignition file. Use result from previous step.
+  
+```bash
+docker run --interactive --rm --security-opt label=disable --volume /var/www/html:/pwd --workdir /pwd quay.io/coreos/butane:release --pretty --strict cloud-config.yaml > cloud-config.ign
 ```
 
-
-## 6: Start httpd service
+## 7: Start httpd service
 
 Install and start the Apache httpd service.
 
@@ -274,7 +343,7 @@ Confirm
 Use 'Curl' to check the Link
 
 ```
-curl http://10.1.51.11/CoreOS/cloud-config.yaml
+curl http://10.1.51.11/CoreOS/cloud-config.ign
 ```
 
 > Replace `10.1.51.11` with your own IP address.
@@ -284,7 +353,7 @@ curl http://10.1.51.11/CoreOS/cloud-config.yaml
 
 ## 1: Download CoreOS ISO into your local PC
 
-Download the CoreOS ISO file from [Here](https://stable.release.core-os.net/amd64-usr/current/coreos_production_iso_image.iso).
+Download the CoreOS ISO file from [Here](https://fedoraproject.org/coreos/download?stream=stable#arches). Use browser to find apropriate link.
 
 
 ## 2: Boot coreos1 from CoreOS ISO
@@ -318,7 +387,7 @@ echo 'nameserver 8.8.8.8' | sudo tee --append /etc/resolv.conf
 Download cloud-config.yaml to your coreos1.
 
 ```bash
-wget http://10.1.51.11/CoreOS/cloud-config.yaml
+curl http://10.1.51.11/CoreOS/cloud-config.ign >> ./cloud-config.ign
 ```
 
 Modify the ***variables*** inside the `cloud-config.yaml` if you need.
@@ -328,7 +397,7 @@ Modify the ***variables*** inside the `cloud-config.yaml` if you need.
 Run
 
 ```bash
-coreos-install -C stable -d /dev/sda -c cloud-config.yaml
+sudo coreos-installer install /dev/sda --ignition-file cloud-config.ign
 ``` 
 
 After you see `Success! CoreOS stable XXXX.X.X is installed on /dev/sda`.
